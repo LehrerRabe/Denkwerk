@@ -13,7 +13,7 @@ Passwort für die Schüler: **Mathe-Genie**
 
 ## Wichtig zu wissen
 
-- **Das Passwort ist nur eine Hürde.** Es steht verschlüsselt im Code, wer sich auskennt, kommt trotzdem rein. Für Übungsaufgaben ohne persönliche Daten reicht das.
+
 - **Der Fortschritt bleibt auf dem Gerät.** Gespeichert wird im Browser des iPads. Es werden keine Daten an einen Server geschickt.
 - **Zum Home-Bildschirm hinzufügen.** Safari löscht gespeicherte Daten von Webseiten, die 7 Tage nicht besucht wurden. Über *Teilen → Zum Home-Bildschirm* öffnet sich Denkwerk wie eine App, dann bleibt der Fortschritt erhalten.
 - Die Suchmaschinen-Sperre (`robots.txt`, `noindex`) sorgt dafür, dass die Seite nicht bei Google auftaucht.
