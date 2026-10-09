@@ -9,11 +9,10 @@ Zusatzaufgaben für Schülerinnen und Schüler, die im Matheunterricht schnell f
 3. Unter **Settings → Pages** als Quelle „Deploy from a branch“, Branch `main`, Ordner `/ (root)` wählen.
 4. Nach ein bis zwei Minuten ist die Seite erreichbar unter `https://<dein-konto>.github.io/Denkwerk/`.
 
-Passwort für die Schüler: **Mathe-Genie**
 
 ## Wichtig zu wissen
 
-- **Das Passwort ist nur eine Hürde.** Es steht verschlüsselt im Code, wer sich auskennt, kommt trotzdem rein. Für Übungsaufgaben ohne persönliche Daten reicht das.
+- **Das Passwort ist nur eine Hürde.** Es steht nur verschlüsselt im Code und nicht in dieser Datei. Wer sich auskennt, kommt trotzdem rein. Für Übungsaufgaben ohne persönliche Daten reicht das.
 - **Der Fortschritt bleibt auf dem Gerät.** Gespeichert wird im Browser des iPads. Es werden keine Daten an einen Server geschickt.
 - **Zum Home-Bildschirm hinzufügen.** Safari löscht gespeicherte Daten von Webseiten, die 7 Tage nicht besucht wurden. Über *Teilen → Zum Home-Bildschirm* öffnet sich Denkwerk wie eine App, dann bleibt der Fortschritt erhalten.
 - Die Suchmaschinen-Sperre (`robots.txt`, `noindex`) sorgt dafür, dass die Seite nicht bei Google auftaucht.
