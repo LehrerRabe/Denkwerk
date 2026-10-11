@@ -331,10 +331,74 @@ textarea.feld { min-height: 140px; resize: vertical; max-width: 100%; }
   body { font-size: 16px; }
   .blatt { padding: 18px 14px 20px 28px; }
   .blatt::before { left: 14px; }
-  .stufen { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .stufen { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stufe .klein { overflow-wrap: anywhere; }
+  .stufe[class*="sf"] { min-height: 0; padding: 12px; }
   .stufe { min-height: 88px; padding: 10px; }
   .stufe .gross { font-size: 1.6rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---------- Farben der Jahrgangsstufen */
+.sf0 { --sf: #c0392b; --sf-bg: rgba(192, 57, 43, .11); }
+.sf1 { --sf: #b45309; --sf-bg: rgba(217, 119, 6, .13); }
+.sf2 { --sf: #8a6d00; --sf-bg: rgba(202, 160, 0, .16); }
+.sf3 { --sf: #2e7d32; --sf-bg: rgba(46, 125, 50, .12); }
+.sf4 { --sf: #00796b; --sf-bg: rgba(0, 121, 107, .12); }
+.sf5 { --sf: #1f5fbf; --sf-bg: rgba(31, 95, 191, .11); }
+.sf6 { --sf: #4b3fb0; --sf-bg: rgba(75, 63, 176, .12); }
+.sf7 { --sf: #8a2fa0; --sf-bg: rgba(138, 47, 160, .11); }
+.sf8 { --sf: #b3245f; --sf-bg: rgba(179, 36, 95, .11); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sf0 { --sf: #ff8a7a; } :root:not([data-theme="light"]) .sf1 { --sf: #ffad5c; }
+  :root:not([data-theme="light"]) .sf2 { --sf: #f0cf4a; } :root:not([data-theme="light"]) .sf3 { --sf: #7fd385; }
+  :root:not([data-theme="light"]) .sf4 { --sf: #5fd3c2; } :root:not([data-theme="light"]) .sf5 { --sf: #8fb6ff; }
+  :root:not([data-theme="light"]) .sf6 { --sf: #ada4ff; } :root:not([data-theme="light"]) .sf7 { --sf: #e09cf0; }
+  :root:not([data-theme="light"]) .sf8 { --sf: #ff8fbd; }
+}
+:root[data-theme="dark"] .sf0 { --sf: #ff8a7a; } :root[data-theme="dark"] .sf1 { --sf: #ffad5c; }
+:root[data-theme="dark"] .sf2 { --sf: #f0cf4a; } :root[data-theme="dark"] .sf3 { --sf: #7fd385; }
+:root[data-theme="dark"] .sf4 { --sf: #5fd3c2; } :root[data-theme="dark"] .sf5 { --sf: #8fb6ff; }
+:root[data-theme="dark"] .sf6 { --sf: #ada4ff; } :root[data-theme="dark"] .sf7 { --sf: #e09cf0; }
+:root[data-theme="dark"] .sf8 { --sf: #ff8fbd; }
+
+.stufe[class*="sf"] {
+  background: linear-gradient(var(--sf-bg), var(--sf-bg)), var(--flaeche);
+  border: 1.5px solid var(--sf); border-top-width: 6px; min-height: 150px;
+}
+.stufe[class*="sf"]:hover { box-shadow: 0 0 0 3px var(--sf-bg), var(--schatten); }
+.stufe[class*="sf"] .gross { color: var(--sf); }
+.stufe .rang { display: flex; align-items: center; gap: 7px; margin-top: 4px; font-weight: 700; font-size: .92rem; color: var(--text); line-height: 1.2; }
+.stufe .rang.leer { color: var(--text-leise); font-weight: 600; }
+.rang-nr {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--sf, var(--tinte)); color: var(--flaeche); font-family: var(--f-display); font-weight: 800; font-size: .85rem;
+}
+.rang.leer .rang-nr { background: transparent; color: var(--text-leise); border: 1.5px dashed var(--text-leise); }
+.rangbalken { position: relative; }
+.rangbalken > span { background: var(--sf, var(--gut)); }
+.rangbalken::after {   /* zehn Abschnitte = zehn Ränge */
+  content: ""; position: absolute; inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1.5px), var(--flaeche) calc(10% - 1.5px) 10%);
+}
+.rangkarte {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 18px;
+  border-radius: var(--radius); border: 1.5px solid var(--sf); border-left-width: 6px;
+  background: linear-gradient(var(--sf-bg), var(--sf-bg)), var(--flaeche);
+}
+.rangkarte .gross-nr { width: 46px; height: 46px; font-size: 1.3rem; }
+.rangkarte .stapel-eng { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rangkarte .rang-titel { font-size: 1.1rem; }
+
+/* ---------- Medaillen für Kategorien */
+.eintrag.silber, .eintrag.silber.erledigt, .eintrag.silber.begonnen {
+  border: 3px solid #9aa5b4; box-shadow: 0 0 0 2px rgba(154, 165, 180, .35);
+}
+.eintrag.gold, .eintrag.gold.erledigt, .eintrag.gold.begonnen {
+  border: 3px solid #d4a017; box-shadow: 0 0 0 2px rgba(212, 160, 23, .35);
+}
+.eintrag.silber .stand, .eintrag.gold .stand { font-weight: 800; }
+.eintrag.silber .stand::before { content: "🥈 "; }
+.eintrag.gold .stand::before { content: "🥇 "; }

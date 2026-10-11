@@ -81,13 +81,24 @@
   }
 
   // ------------------------------------------------------------ Speicher
-  var zustand = { auth: false, stufe: null, aufgaben: {}, hinweisWeg: false };
+  var zustand = { auth: false, stufe: null, aufgaben: {}, hinweisWeg: false, gutschrift: {}, gesehen: {} };
   function laden() {
     try {
       var raw = window.localStorage.getItem(SPEICHER_KEY);
       if (raw) {
         var z = JSON.parse(raw);
         if (z && typeof z === "object") zustand = Object.assign(zustand, z);
+      }
+      if (!zustand.gutschrift) zustand.gutschrift = {};
+      if (!zustand.gesehen) zustand.gesehen = {};
+      if (!zustand.gutschriftMigriert) {
+        // Ältere Spielstände: richtig gelöste Aufgaben (ohne verratene Lösung) nachträglich gutschreiben
+        Object.keys(zustand.aufgaben).forEach(function (id) {
+          var s = zustand.aufgaben[id];
+          if (s && s.status === "erledigt" && s.ergebnis && s.ergebnis.gesamt > 0 && s.ergebnis.richtig === s.ergebnis.gesamt && (s.hilfen || 0) < 3) zustand.gutschrift[id] = 1;
+          if (s && (s.status === "erledigt" || (s.hilfen || 0) >= 3)) zustand.gesehen[id] = 1;
+        });
+        zustand.gutschriftMigriert = true;
       }
     } catch (e) { /* Speicher nicht verfügbar: Seite funktioniert trotzdem, nur ohne Erinnerung */ }
   }
@@ -212,6 +223,27 @@
     return { fertig: fertig, alle: alle.length };
   }
 
+  // ------------------------------------------------------------ Ränge und Medaillen
+  // Gezählt werden nur richtig gelöste Aufgaben: geprüft, alles richtig, Lösung nicht vorher verraten.
+  var RAENGE = ["Zahlenfinder", "Rechenlehrling", "Musterentdecker", "Knobelfuchs", "Rätselknacker",
+                "Logikprofi", "Beweisführer", "Denkmeister", "Mathe-Ass", "Mathe-Genie"];
+  // Eine Aufgabe zählt, wenn sie beim ersten Prüfen ganz richtig war und die Lösung vorher nicht angezeigt wurde.
+  // Die Gutschrift bleibt auch nach „Aufgabe neu starten“ erhalten.
+  function geloest(id) { return !!zustand.gutschrift[id]; }
+  function anzahlGeloest(liste) { return liste.filter(function (a) { return geloest(a.id); }).length; }
+  function rangInfo(stufe) {
+    var alle = aufgabenVon(stufe), n = alle.length, g = anzahlGeloest(alle);
+    var stufeNr = 0;
+    for (var k = 1; k <= 10; k++) if (g >= Math.ceil(n * k / 10)) stufeNr = k;
+    var naechste = stufeNr < 10 ? Math.ceil(n * (stufeNr + 1) / 10) - g : 0;
+    return { nr: stufeNr, name: stufeNr ? RAENGE[stufeNr - 1] : null, geloest: g, alle: n, fehlen: naechste,
+             naechsterName: stufeNr < 10 ? RAENGE[stufeNr] : null };
+  }
+  function medaille(stufe, kat) {
+    var auf = aufgabenVon(stufe, kat), g = anzahlGeloest(auf);
+    return { geloest: g, alle: auf.length, art: (g === auf.length && g > 0) ? "gold" : (g * 2 >= auf.length && g > 0 ? "silber" : "") };
+  }
+
   ANSICHTEN.start = function (seite) {
     seite.appendChild(kopf(null));
     var begonnen = Object.keys(zustand.aufgaben).filter(function (id) { return aufgabeNachId[id]; }).length;
@@ -220,15 +252,19 @@
       h("p", { text: "Wähle deine Jahrgangsstufe. Dort findest du Knobelaufgaben, die zu dem passen, was du schon kannst. Du darfst auch eine Stufe höher probieren." }),
     ]));
     var raster = h("div", { class: "stufen" });
-    D.stufen.forEach(function (s) {
-      var f = fortschritt(s.id);
-      raster.appendChild(h("button", { class: "stufe", type: "button", onclick: function () {
+    D.stufen.forEach(function (s, i) {
+      var r = rangInfo(s.id);
+      raster.appendChild(h("button", { class: "stufe sf" + i, type: "button", "aria-label": s.name + ", " + (r.name ? "Rang " + r.nr + ": " + r.name : "noch kein Rang"), onclick: function () {
         zustand.stufe = s.id; sichern(); zeige("stufe", s.id);
       } }, [
         h("span", { class: "gross", text: s.kurz }),
         h("span", { class: "klein", text: s.name }),
-        h("span", { class: "klein stand", text: f.fertig + " von " + f.alle + " erledigt" }),
-        h("span", { class: "balken", "aria-hidden": "true" }, [h("span", { style: "width:" + (f.alle ? (100 * f.fertig / f.alle) : 0) + "%" })]),
+        h("span", { class: "rang" + (r.nr ? "" : " leer") }, [
+          h("span", { class: "rang-nr", "aria-hidden": "true", text: r.nr ? String(r.nr) : "–" }),
+          h("span", { class: "rang-name", text: r.name || "Noch kein Rang" }),
+        ]),
+        h("span", { class: "klein stand", text: r.geloest + " von " + r.alle + " gelöst" }),
+        h("span", { class: "balken rangbalken", "aria-hidden": "true" }, [h("span", { style: "width:" + (r.alle ? (100 * r.geloest / r.alle) : 0) + "%" })]),
       ]));
     });
     seite.appendChild(raster);
@@ -263,7 +299,7 @@
       h("button", { type: "button", onclick: function () {
         dialog("Alles zurücksetzen?", "Damit löschst du alle gespeicherten Aufgaben und Ergebnisse auf diesem Gerät. Das lässt sich nicht rückgängig machen.", [
           { text: "Ja, alles löschen", art: "warn", aktion: function () {
-            zustand.aufgaben = {}; sichern(); toast("Fortschritt gelöscht"); zeige("start");
+            zustand.aufgaben = {}; zustand.gutschrift = {}; zustand.gesehen = {}; sichern(); toast("Fortschritt gelöscht"); zeige("start");
           } },
           { text: "Abbrechen", art: "zweit" },
         ]);
@@ -275,10 +311,20 @@
     var s = stufeNachId[stufe];
     seite.appendChild(kopf({ text: "Hauptmenü", aktion: function () { zeige("start"); } }));
     var f = fortschritt(stufe);
+    var r = rangInfo(stufe);
     seite.appendChild(h("section", { class: "begruessung" }, [
       h("span", { class: "label", text: s.name }),
       h("h1", { text: "Such dir eine Kategorie aus" }),
-      h("p", { text: f.fertig + " von " + f.alle + " Aufgaben erledigt. Oder lass das Glücksrad entscheiden." }),
+      h("p", { text: r.geloest + " von " + r.alle + " Aufgaben richtig gelöst (" + f.fertig + " bearbeitet). Die Zahlen rechts zeigen, wie viele Aufgaben einer Kategorie du richtig gelöst hast. Oder lass das Glücksrad entscheiden." }),
+    ]));
+    seite.appendChild(h("div", { class: "rangkarte sf" + D.stufen.indexOf(s) }, [
+      h("span", { class: "rang-nr gross-nr", "aria-hidden": "true", text: r.nr ? String(r.nr) : "–" }),
+      h("div", { class: "stapel-eng" }, [
+        h("span", { class: "label", text: "Dein Rang in " + s.name }),
+        h("strong", { class: "rang-titel", text: r.name ? r.name + " (Rang " + r.nr + " von 10)" : "Noch kein Rang" }),
+        h("span", { class: "leise", text: r.nr === 10 ? "Höchster Rang erreicht – alle Aufgaben dieser Stufe gelöst!" :
+          "Noch " + r.fehlen + " richtig gelöste " + (r.fehlen === 1 ? "Aufgabe" : "Aufgaben") + " bis „" + r.naechsterName + "“." }),
+      ]),
     ]));
     seite.appendChild(h("div", { class: "knopfreihe" }, [
       h("button", { class: "knopf", type: "button", onclick: function () { zeige("rad", stufe); } }, ["Glücksrad drehen"]),
@@ -289,14 +335,15 @@
       var auf = aufgabenVon(stufe, k.id);
       var fertig = auf.filter(function (a) { return status(a.id) === "erledigt"; }).length;
       var angefangen = auf.filter(function (a) { return status(a.id) === "begonnen"; }).length;
-      var klasse = "eintrag" + (fertig === auf.length ? " erledigt" : (angefangen ? " begonnen" : ""));
+      var md = medaille(stufe, k.id);
+      var klasse = "eintrag" + (fertig === auf.length ? " erledigt" : (angefangen ? " begonnen" : "")) + (md.art ? " " + md.art : "");
       liste.appendChild(h("button", { class: klasse, type: "button", onclick: function () { zeige("kategorie", { stufe: stufe, kat: k.id }); } }, [
         h("span", { class: "sym", "aria-hidden": "true", text: k.symbol }),
         h("span", { class: "mitte" }, [
           h("span", { class: "titel", text: k.name }),
-          h("span", { class: "unter", text: k.kurz }),
+          h("span", { class: "unter", text: k.kurz + (md.art === "gold" ? " · Gold: alles gelöst" : (md.art === "silber" ? " · Silber: Hälfte gelöst" : "")) }),
         ]),
-        h("span", { class: "stand", text: fertig + "/" + auf.length }),
+        h("span", { class: "stand", title: md.geloest + " von " + auf.length + " richtig gelöst (" + fertig + " bearbeitet)", "aria-label": md.geloest + " von " + auf.length + " richtig gelöst", text: md.geloest + "/" + auf.length }),
       ]));
     });
     seite.appendChild(liste);
@@ -537,7 +584,7 @@
     hilfeKnopf.addEventListener("click", function () {
       if (arbeit.hilfen === 2) {
         dialog("Lösung wirklich anzeigen?", "Probier es ruhig noch ein bisschen. Wenn du die Lösung siehst, ist die Aufgabe nicht mehr spannend.", [
-          { text: "Ja, Lösung zeigen", aktion: function () { arbeit.hilfen = 3; hilfenZeigen(); } },
+          { text: "Ja, Lösung zeigen", aktion: function () { arbeit.hilfen = 3; zustand.gesehen[id] = 1; sichern(); hilfenZeigen(); } },
           { text: "Ich probiere weiter", art: "zweit" },
         ]);
         return;
@@ -577,6 +624,7 @@
     }
 
     function pruefen() {
+      var rangVorher = rangInfo(a.stufe).nr, medVorher = medaille(a.stufe, a.kat).art;
       var antworten = typ.lesen(ui);
       var erg = typ.pruefen(a, ui, antworten);
       arbeit.antworten = antworten;
@@ -587,12 +635,22 @@
       }
       if (arbeit.hilfen >= 3 && arbeit.ergebnis) arbeit.ergebnis.kurz += " (mit Lösung)";
       zustand.aufgaben[id] = kopie(arbeit);
+      if (!erg.selbst && erg.gesamt > 0 && erg.richtig === erg.gesamt && arbeit.hilfen < 3 && !zustand.gesehen[id]) zustand.gutschrift[id] = 1;
+      zustand.gesehen[id] = 1;
       sichern();
       erledigt = true;
       typ.sperren(ui);
       pruefKnopf.hidden = true; speicherKnopf.hidden = true; resetKnopf.hidden = false;
       hilfenZeigen();
       auswertungZeigen(erg);
+      var rangNach = rangInfo(a.stufe), medNach = medaille(a.stufe, a.kat).art;
+      if (rangNach.nr > rangVorher) {
+        dialog("Neuer Rang: " + rangNach.name + "!", "Du hast in " + stufeNachId[a.stufe].name + " jetzt <strong>Rang " + rangNach.nr + " von 10</strong> erreicht. " +
+          (rangNach.nr < 10 ? "Nächster Rang: „" + rangNach.naechsterName + "“." : "Mehr geht nicht – du bist ein echtes Mathe-Genie!"),
+          [{ text: "Super!" }]);
+      } else if (medNach && medNach !== medVorher) {
+        toast((medNach === "gold" ? "Gold" : "Silber") + " in „" + katNachId[a.kat].name + "“!");
+      }
     }
     pruefKnopf.addEventListener("click", function () {
       var leer = typ.leer ? typ.leer(ui) : 0;
