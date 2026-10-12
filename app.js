@@ -138,7 +138,9 @@
   function logo() {
     return h("span", { class: "marke", html:
       '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7" fill="currentColor"/>' +
-      '<path d="M9 22 L16 9 L23 22 M12 17.5 H20" stroke="var(--flaeche)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '<polygon points="16,7 24.5,11.5 16,16 7.5,11.5" fill="var(--flaeche)"/>' +
+      '<polygon points="7.5,12.8 15.3,17.2 15.3,25.8 7.5,21.4" fill="var(--flaeche)" fill-opacity=".7"/>' +
+      '<polygon points="24.5,12.8 16.7,17.2 16.7,25.8 24.5,21.4" fill="var(--flaeche)" fill-opacity=".45"/></svg>' +
       '<span>Denkwerk</span>' });
   }
 
