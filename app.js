@@ -612,6 +612,175 @@
   };
 
   // ------------------------------------------------------------ Aufgabe
+  // ---------- Schmierzettel ----------
+  // Pro Aufgabe ein Zeichenblatt für Nebenrechnungen. Gespeichert werden nur die Striche
+  // (Punkte in Tausendstel der Blattbreite) unter einem eigenen Schlüssel, damit der
+  // Fortschritt klein bleibt. Es werden höchstens SCHMIER_MAX Blätter behalten.
+  var SCHMIER_KEY = "denkwerk.schmier.v1", SCHMIER_MAX = 40;
+  function schmierAlle() {
+    try { return JSON.parse(localStorage.getItem(SCHMIER_KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function schmierSchreiben(alle) {
+    var ids = Object.keys(alle).sort(function (x, y) { return (alle[y].t || 0) - (alle[x].t || 0); });
+    while (ids.length > SCHMIER_MAX) delete alle[ids.pop()];
+    for (var versuch = 0; versuch < 8; versuch++) {
+      try { localStorage.setItem(SCHMIER_KEY, JSON.stringify(alle)); return true; }
+      catch (e) { if (ids.length <= 1) return false; delete alle[ids.pop()]; }
+    }
+    return false;
+  }
+  function schmierLoeschen(id) { var alle = schmierAlle(); if (alle[id]) { delete alle[id]; schmierSchreiben(alle); } }
+
+  function schmierzettel(id) {
+    var gespeichert = schmierAlle()[id] || null;
+    var striche = gespeichert && gespeichert.s ? gespeichert.s : [];
+    var hoehe = gespeichert && gespeichert.h ? gespeichert.h : 1;   // Faktor für „mehr Platz“
+    var raster = gespeichert ? gespeichert.r !== 0 : true;
+    var werkzeugArt = "stift", farbe = 0, stiftGesehen = false;
+    var FARBEN = ["--text", "--tinte", "--falsch"];
+
+    var box = h("section", { class: "schmier", "aria-label": "Schmierzettel" });
+    var offen = striche.length > 0;
+    var umschalter = h("button", { class: "knopf leicht schmier-auf", type: "button", "aria-expanded": offen ? "true" : "false" });
+    var inhalt = h("div", { class: "schmier-inhalt" });
+    box.appendChild(umschalter); box.appendChild(inhalt);
+
+    var leinwand = h("canvas", { class: "schmier-blatt", "aria-label": "Zeichenfläche für Nebenrechnungen. Mit Finger, Stift oder Maus schreiben." });
+    var ctx = leinwand.getContext("2d");
+    var knoepfe = {};
+    function wk(name, text, titel, aktion) {
+      var b = h("button", { class: "schmier-knopf", type: "button", title: titel, "aria-label": titel, onclick: aktion }, [text]);
+      knoepfe[name] = b; return b;
+    }
+    var leiste = h("div", { class: "schmier-leiste", role: "toolbar", "aria-label": "Werkzeuge" }, [
+      wk("stift0", "✎", "Stift schwarz", function () { werkzeugArt = "stift"; farbe = 0; markieren(); }),
+      wk("stift1", "✎", "Stift blau", function () { werkzeugArt = "stift"; farbe = 1; markieren(); }),
+      wk("stift2", "✎", "Stift rot", function () { werkzeugArt = "stift"; farbe = 2; markieren(); }),
+      wk("radierer", "⌫", "Radierer", function () { werkzeugArt = "radierer"; markieren(); }),
+      h("span", { class: "schmier-trenner" }),
+      wk("zurueck", "↶", "Rückgängig", function () { if (striche.length) { striche.pop(); zeichnen(); merken(); } }),
+      wk("raster", "#", "Kästchen ein/aus", function () { raster = !raster; rasterSetzen(); merken(); }),
+      wk("mehr", "+", "Mehr Platz", function () { if (hoehe < 3) { hoehe += 0.5; groesse(); merken(); } }),
+      wk("leeren", "🗑", "Alles löschen", function () {
+        if (!striche.length) return;
+        dialog("Schmierzettel leeren?", "Alles, was du auf den Schmierzettel geschrieben hast, wird gelöscht.", [
+          { text: "Leeren", art: "warn", aktion: function () { striche = []; hoehe = 1; groesse(); merken(); } },
+          { text: "Abbrechen", art: "zweit" },
+        ]);
+      }),
+    ]);
+    knoepfe.stift1.classList.add("blau"); knoepfe.stift2.classList.add("rot");
+    inhalt.appendChild(leiste);
+    inhalt.appendChild(h("div", { class: "schmier-rahmen" }, [leinwand]));
+    inhalt.appendChild(h("p", { class: "leise schmier-hinweis", text: "Nur für dich: Der Schmierzettel wird nicht geprüft und bleibt auf diesem Gerät." }));
+
+    function markieren() {
+      ["stift0", "stift1", "stift2", "radierer"].forEach(function (n) { knoepfe[n].setAttribute("aria-pressed", "false"); });
+      knoepfe[werkzeugArt === "radierer" ? "radierer" : "stift" + farbe].setAttribute("aria-pressed", "true");
+      leinwand.classList.toggle("radiert", werkzeugArt === "radierer");
+    }
+    function rasterSetzen() { leinwand.classList.toggle("ohne-raster", !raster); knoepfe.raster.setAttribute("aria-pressed", raster ? "true" : "false"); }
+    function farbWert(i) { return getComputedStyle(document.documentElement).getPropertyValue(FARBEN[i]).trim() || "#1c2233"; }
+
+    var breite = 0, dpr = 1;
+    function groesse() {
+      var w = leinwand.parentNode.clientWidth || 600;
+      breite = w;
+      var hpx = Math.round(Math.max(260, Math.min(w * 0.62, 460)) * hoehe);
+      dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      leinwand.style.height = hpx + "px";
+      leinwand.width = Math.round(w * dpr); leinwand.height = Math.round(hpx * dpr);
+      zeichnen();
+    }
+    function strichMalen(s) {
+      var p = s.p, f = breite / 1000;
+      if (!p || p.length < 2) return;
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      if (s.f === "r") { ctx.globalCompositeOperation = "destination-out"; ctx.lineWidth = 22; ctx.strokeStyle = "#000"; }
+      else { ctx.globalCompositeOperation = "source-over"; ctx.lineWidth = 2.4; ctx.strokeStyle = farbWert(s.c || 0); }
+      ctx.beginPath();
+      ctx.moveTo(p[0] * f, p[1] * f);
+      if (p.length === 2) ctx.lineTo(p[0] * f + 0.1, p[1] * f + 0.1);
+      for (var i = 2; i < p.length; i += 2) ctx.lineTo(p[i] * f, p[i + 1] * f);
+      ctx.stroke();
+      ctx.restore();
+    }
+    function zeichnen() {
+      ctx.clearRect(0, 0, leinwand.width, leinwand.height);
+      striche.forEach(strichMalen);
+    }
+    var speicherUhr = null;
+    function merken() {
+      clearTimeout(speicherUhr);
+      speicherUhr = setTimeout(function () {
+        var alle = schmierAlle();
+        if (!striche.length && hoehe === 1 && raster) delete alle[id];
+        else alle[id] = { s: striche, h: hoehe, r: raster ? 1 : 0, t: Date.now() };
+        if (!schmierSchreiben(alle)) toast("Der Schmierzettel konnte nicht gespeichert werden");
+      }, 500);
+    }
+
+    var aktiv = null, zeigerId = null;
+    function punkt(ev) {
+      var r = leinwand.getBoundingClientRect();
+      return [Math.round((ev.clientX - r.left) / breite * 1000), Math.round((ev.clientY - r.top) / breite * 1000)];
+    }
+    leinwand.addEventListener("pointerdown", function (ev) {
+      if (ev.pointerType === "pen") stiftGesehen = true;
+      if (ev.pointerType === "touch" && stiftGesehen) return;   // Handballen ignorieren, wenn ein Stift benutzt wird
+      if (ev.button !== undefined && ev.button > 0 && ev.pointerType === "mouse") return;
+      ev.preventDefault();
+      zeigerId = ev.pointerId;
+      try { leinwand.setPointerCapture(ev.pointerId); } catch (e) {}
+      var q = punkt(ev);
+      aktiv = werkzeugArt === "radierer" ? { f: "r", p: q } : { f: "p", c: farbe, p: q };
+      striche.push(aktiv);
+      zeichnen();
+    });
+    leinwand.addEventListener("pointermove", function (ev) {
+      if (!aktiv || ev.pointerId !== zeigerId) return;
+      ev.preventDefault();
+      var liste = ev.getCoalescedEvents ? ev.getCoalescedEvents() : [ev];
+      if (!liste.length) liste = [ev];
+      liste.forEach(function (e) {
+        var q = punkt(e), p = aktiv.p, n = p.length;
+        if (Math.abs(q[0] - p[n - 2]) + Math.abs(q[1] - p[n - 1]) >= 2) { p.push(q[0], q[1]); }
+      });
+      zeichnen();
+    });
+    function ende(ev) {
+      if (!aktiv || (ev && ev.pointerId !== zeigerId)) return;
+      aktiv = null; zeigerId = null;
+      merken();
+    }
+    leinwand.addEventListener("pointerup", ende);
+    leinwand.addEventListener("pointercancel", ende);
+
+    function oeffnen(auf) {
+      offen = auf;
+      umschalter.setAttribute("aria-expanded", auf ? "true" : "false");
+      umschalter.textContent = auf ? "✎ Schmierzettel ausblenden" : "✎ Schmierzettel für Nebenrechnungen";
+      inhalt.hidden = !auf;
+      if (auf) requestAnimationFrame(groesse);
+    }
+    umschalter.addEventListener("click", function () { oeffnen(!offen); });
+    var groesseUhr = null;
+    window.addEventListener("resize", function () {
+      if (!offen || !document.body.contains(leinwand)) return;
+      clearTimeout(groesseUhr); groesseUhr = setTimeout(groesse, 150);
+    });
+    // Farben neu zeichnen, wenn das Farbschema wechselt
+    if (window.matchMedia) {
+      var mq = window.matchMedia("(prefers-color-scheme: dark)");
+      var neu = function () { if (offen && document.body.contains(leinwand)) zeichnen(); };
+      if (mq.addEventListener) mq.addEventListener("change", neu); else if (mq.addListener) mq.addListener(neu);
+    }
+    markieren(); rasterSetzen(); oeffnen(offen);
+    return box;
+  }
+
   ANSICHTEN.aufgabe = function (seite, id) {
     var a = aufgabeNachId[id];
     var k = katNachId[a.kat];
@@ -656,6 +825,7 @@
     blatt.appendChild(h("header", { class: "aufgabe-kopf" }, [meta, h("h1", { text: a.titel }),
       h("p", { class: "leise", style: "font-size:.85rem", text: "Kompetenz: " + a.kompetenz })]));
     blatt.appendChild(h("div", { class: "aufgabentext", html: a.text }));
+    blatt.appendChild(schmierzettel(id));
 
     var bereich = h("div", { class: "antworten" });
     blatt.appendChild(bereich);
@@ -782,8 +952,8 @@
       } else pruefen();
     });
     resetKnopf.addEventListener("click", function () {
-      dialog("Aufgabe neu starten?", "Deine Eingaben und das Ergebnis dieser Aufgabe werden gelöscht.", [
-        { text: "Neu starten", art: "warn", aktion: function () { delete zustand.aufgaben[id]; sichern(); zeige("aufgabe", id); } },
+      dialog("Aufgabe neu starten?", "Deine Eingaben, das Ergebnis und der Schmierzettel dieser Aufgabe werden gelöscht.", [
+        { text: "Neu starten", art: "warn", aktion: function () { delete zustand.aufgaben[id]; sichern(); schmierLoeschen(id); zeige("aufgabe", id); } },
         { text: "Abbrechen", art: "zweit" },
       ]);
     });
@@ -1900,6 +2070,7 @@
       ["Auftrag für die Klasse", "Link, QR-Code und Code mit 8 Zeichen. Den Schülerinnen und Schülern wird oben angezeigt, was sie bearbeiten sollen. Alle anderen Aufgaben bleiben frei.", "lkAuftrag"],
       ["Arbeitsblatt drucken", "Aufgaben nach Stufe, Thema und Kategorie auswählen und als Arbeitsblatt drucken oder als PDF sichern, auf Wunsch mit Lösungen.", "lkDruck"],
       ["Urkunde prüfen", "Prüfcode einer Urkunde eingeben oder den QR-Code auf der Urkunde mit der iPad-Kamera scannen.", "pruefen"],
+      ["Klassenübersicht", "Prüfcodes der Urkunden pro Klasse sammeln: Rang, gelöste Aufgaben, Medaillen und Abzeichen auf einen Blick. Die Liste bleibt auf diesem Gerät.", "lkKlassen"],
     ];
     var liste = h("div", { class: "liste" });
     karten.forEach(function (k) {
@@ -2137,6 +2308,31 @@
         ]),
         h("p", { class: "leise", text: "Vergleiche diese Angaben mit der Urkunde. Weichen sie ab, wurde die Urkunde verändert." }),
       ]));
+      if (lkAngemeldet() && nameOk) ausgabe.appendChild(inKlasseBereich(codeFeld.value, nameFeld.value));
+    }
+    function inKlasseBereich(code, name) {
+      var kd = klLaden();
+      var nf = h("input", { class: "feld", id: "p-kl-name", type: "text", autocomplete: "off", spellcheck: "false", value: name || "", placeholder: "Vor- und Nachname" });
+      var box = h("div", { class: "blatt stapel kl-uebernehmen" }, [h("h3", { text: "In die Klassenübersicht übernehmen" })]);
+      if (!kd.klassen.length) {
+        box.appendChild(h("p", { class: "leise", text: "Du hast noch keine Klasse angelegt." }));
+        box.appendChild(h("div", { class: "knopfreihe" }, [h("button", { class: "knopf leicht", type: "button", onclick: function () { zeige("lkKlassen"); } }, ["Klassenübersicht öffnen"])]));
+        return box;
+      }
+      var sel = auswahlFeld("p-kl-klasse", kd.klassen.map(function (k) { return [k.id, k.name]; }), kd.klassen[0].id);
+      var meld = h("div", { "aria-live": "polite" });
+      box.appendChild(h("div", { class: "antwortfeld" }, [h("label", { for: "p-kl-klasse", text: "Klasse" }), sel]));
+      box.appendChild(h("div", { class: "antwortfeld" }, [h("label", { for: "p-kl-name", text: "Name" }), nf]));
+      box.appendChild(h("div", { class: "knopfreihe" }, [h("button", { class: "knopf", type: "button", onclick: function () {
+        var r = klEintragen(kd, sel.value, nf.value, code);
+        meld.innerHTML = "";
+        if (r.fehler) { meld.appendChild(h("div", { class: "ergebnis-box nein" }, [h("p", { text: r.fehler })])); return; }
+        klSpeichern(kd);
+        toast(nf.value.trim() + " " + r.hinweis);
+        zeige("lkKlassen", { klasse: sel.value });
+      } }, ["Übernehmen"])]));
+      box.appendChild(meld);
+      return box;
     }
     var form = h("form", { class: "blatt stapel", novalidate: true }, [
       h("div", { class: "antwortfeld" }, [h("label", { for: "p-code", text: "Prüfcode" }), codeFeld]),
@@ -2147,6 +2343,210 @@
     form.addEventListener("submit", function (e) { e.preventDefault(); pruefe(); });
     seite.appendChild(form);
     if (code) pruefe();
+  };
+
+  // ------------------------------------------------------------ Klassenübersicht (nur auf dem Gerät der Lehrkraft)
+  // Die Lehrkraft trägt die Prüfcodes der Urkunden ein. Gespeichert wird lokal unter KL_KEY:
+  // { klassen: [{ id, name, eintraege: [{ name, code, eingetragen }] }] }. Kein Server.
+  var KL_KEY = "denkwerk.klassen.v1";
+  function klLaden() {
+    try { var d = JSON.parse(localStorage.getItem(KL_KEY) || "null"); if (d && Array.isArray(d.klassen)) return d; } catch (e) { /* leer */ }
+    return { klassen: [] };
+  }
+  function klSpeichern(d) {
+    try { localStorage.setItem(KL_KEY, JSON.stringify(d)); return true; }
+    catch (e) { toast("Speichern hat nicht geklappt – der Browser erlaubt keinen Speicher"); return false; }
+  }
+  function klNeueId() { return "k" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36); }
+  // Trägt einen Code ein. Pro Name und Stufe bleibt nur die neueste/beste Urkunde stehen.
+  function klEintragen(d, klasseId, name, code) {
+    var k = d.klassen.filter(function (x) { return x.id === klasseId; })[0];
+    if (!k) return { fehler: "Klasse nicht gefunden." };
+    var info = codeLesen(code);
+    if (!info || !info.gueltig) return { fehler: "Der Prüfcode ist ungültig oder falsch abgetippt." };
+    name = String(name || "").trim().replace(/\s+/g, " ");
+    if (!name) return { fehler: "Bitte gib den Namen ein." };
+    if (info.name && nameHash(name) !== info.name) return { fehler: "Der Name passt nicht zum Code. Auf der Urkunde steht ein anderer Name (oder er ist anders geschrieben)." };
+    var norm = codeBauen(info).replace(/-/g, "");   // einheitliche Schreibweise (O/0, I/1, Bindestriche)
+    var doppelt = k.eintraege.filter(function (e) { return e.code === norm && nameNorm(e.name) !== nameNorm(name); })[0];
+    if (doppelt) return { fehler: "Dieser Code ist schon für „" + doppelt.name + "“ eingetragen." };
+    var alt = k.eintraege.filter(function (e) { var i = codeLesen(e.code); return nameNorm(e.name) === nameNorm(name) && i && i.stufe === info.stufe; })[0];
+    var hinweis = "eingetragen";
+    if (alt) {
+      var ai = codeLesen(alt.code);
+      if (ai.tag > info.tag || (ai.tag === info.tag && ai.geloest > info.geloest)) return { fehler: "Für " + name + " ist in dieser Stufe schon eine neuere Urkunde eingetragen." };
+      k.eintraege.splice(k.eintraege.indexOf(alt), 1); hinweis = "aktualisiert"; name = alt.name;
+    }
+    k.eintraege.push({ name: name, code: norm, eingetragen: isoTag(new Date()) });
+    return { ok: true, hinweis: hinweis, info: info };
+  }
+  function codeSchoen(c) { return String(c).replace(/(.{5})(?=.)/g, "$1-"); }
+  function klZeilen(k) {
+    return k.eintraege.map(function (e) { return { e: e, i: codeLesen(e.code) }; }).filter(function (z) { return z.i && z.i.gueltig; })
+      .sort(function (a, b) { return a.e.name.localeCompare(b.e.name, "de") || a.i.stufe - b.i.stufe; });
+  }
+  function abzAnzahl(maske) { var n = 0; ABZEICHEN.forEach(function (b, i) { if (Math.floor(maske / Math.pow(2, i)) % 2 === 1) n++; }); return n; }
+  function klCsv(k) {
+    var kopfz = ["Name", "Stufe", "Rang", "Rangname", "Richtig gelöst", "Silber", "Gold", "Abzeichen", "Urkunde vom", "Prüfcode"];
+    var zeilen = [kopfz].concat(klZeilen(k).map(function (z) {
+      var i = z.i;
+      return [z.e.name, D.stufen[i.stufe].name, i.rang, i.rang ? RAENGE[i.rang - 1] : "", i.geloest, i.silber, i.gold, abzAnzahl(i.abz), datumKurz(tagDatum(i.tag)), codeSchoen(z.e.code)];
+    }));
+    return "﻿" + zeilen.map(function (r) { return r.map(function (x) { x = String(x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(";"); }).join("\r\n");
+  }
+
+  ANSICHTEN.lkKlassen = function (seite, arg) {
+    if (!lkAngemeldet()) { zeige("lehrkraft"); return; }
+    lkKopf(seite, true);
+    var d = klLaden();
+    arg = arg || {};
+    var aktiv = d.klassen.filter(function (x) { return x.id === arg.klasse; })[0] || d.klassen[0] || null;
+    seite.appendChild(h("section", { class: "begruessung" }, [
+      h("span", { class: "label", text: "Lehrkraft-Bereich" }), h("h1", { text: "Klassenübersicht" }),
+      h("p", { text: "Trage die Prüfcodes der Urkunden deiner Schülerinnen und Schüler ein. Die Liste bleibt nur auf diesem Gerät – es werden keine Daten verschickt." }),
+    ]));
+
+    // Klassenwahl
+    var wahl = h("div", { class: "blatt stapel nicht-drucken" });
+    seite.appendChild(wahl);
+    var klName = h("input", { class: "feld", id: "kl-neu", type: "text", autocomplete: "off", placeholder: "z. B. 7b", maxlength: "30" });
+    var neuForm = h("form", { class: "knopfreihe kl-neu", novalidate: true }, [klName, h("button", { class: "knopf leicht", type: "submit" }, ["Klasse anlegen"])]);
+    neuForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var n = klName.value.trim();
+      if (!n) { klName.focus(); return; }
+      if (d.klassen.some(function (x) { return x.name.toLowerCase() === n.toLowerCase(); })) { toast("Diese Klasse gibt es schon"); return; }
+      var k = { id: klNeueId(), name: n, eintraege: [] };
+      d.klassen.push(k); klSpeichern(d); zeige("lkKlassen", { klasse: k.id });
+    });
+    if (d.klassen.length) {
+      var reiter = h("div", { class: "kl-reiter", role: "tablist", "aria-label": "Klassen" });
+      d.klassen.forEach(function (k) {
+        reiter.appendChild(h("button", { class: "chip kl-chip" + (k === aktiv ? " aktiv" : ""), type: "button", role: "tab", "aria-selected": k === aktiv ? "true" : "false",
+          onclick: function () { zeige("lkKlassen", { klasse: k.id }); } }, [k.name + " (" + k.eintraege.length + ")"]));
+      });
+      wahl.appendChild(h("label", { class: "label", text: "Klasse" }));
+      wahl.appendChild(reiter);
+    }
+    wahl.appendChild(h("label", { class: "label", for: "kl-neu", text: d.klassen.length ? "Weitere Klasse anlegen" : "Lege zuerst eine Klasse an" }));
+    wahl.appendChild(neuForm);
+    if (!aktiv) return;
+
+    // Eintragen
+    var codeFeld = h("input", { class: "feld code", id: "kl-code", type: "text", autocomplete: "off", autocapitalize: "characters", spellcheck: "false", placeholder: "XXXXX-XXXXX-XXXXX-XXXXX", value: arg.code || "" });
+    var nameFeld = h("input", { class: "feld", id: "kl-name", type: "text", autocomplete: "off", spellcheck: "false", placeholder: "Vor- und Nachname", value: arg.name || "" });
+    var meldung = h("div", { "aria-live": "polite" });
+    var eintragForm = h("form", { class: "blatt stapel nicht-drucken", novalidate: true }, [
+      h("h2", { text: "Urkunde eintragen – " + aktiv.name }),
+      h("div", { class: "antwortfeld" }, [h("label", { for: "kl-name", text: "Name" }), nameFeld]),
+      h("div", { class: "antwortfeld" }, [h("label", { for: "kl-code", text: "Prüfcode von der Urkunde" }), codeFeld]),
+      h("p", { class: "leise", style: "font-size:.88rem", text: "Tipp: Scanne den QR-Code der Urkunde mit der Kamera-App. Denkwerk öffnet dann „Urkunde prüfen“, und dort kannst du die Urkunde direkt in eine Klasse übernehmen." }),
+      h("div", { class: "knopfreihe" }, [h("button", { class: "knopf", type: "submit" }, ["Eintragen"])]),
+      meldung,
+    ]);
+    eintragForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var r = klEintragen(d, aktiv.id, nameFeld.value, codeFeld.value);
+      meldung.innerHTML = "";
+      if (r.fehler) { meldung.appendChild(h("div", { class: "ergebnis-box nein" }, [h("p", { text: r.fehler })])); return; }
+      klSpeichern(d);
+      toast(nameFeld.value.trim() + " " + r.hinweis);
+      zeige("lkKlassen", { klasse: aktiv.id });
+      setTimeout(function () { var f = document.getElementById("kl-name"); if (f) f.focus(); }, 30);
+    });
+    seite.appendChild(eintragForm);
+
+    // Tabelle
+    var zeilen = klZeilen(aktiv);
+    var tab = h("section", { class: "blatt stapel" });
+    seite.appendChild(tab);
+    tab.appendChild(h("h2", { text: aktiv.name + ": " + zeilen.length + (zeilen.length === 1 ? " Urkunde" : " Urkunden") }));
+    if (!zeilen.length) {
+      tab.appendChild(h("p", { class: "leise", text: "Noch keine Einträge." }));
+    } else {
+      var proStufe = {};
+      zeilen.forEach(function (z) { var s = D.stufen[z.i.stufe].name; (proStufe[s] = proStufe[s] || []).push(z.i); });
+      tab.appendChild(h("div", { class: "kl-kennzahlen" }, Object.keys(proStufe).map(function (s) {
+        var l = proStufe[s], schnitt = l.reduce(function (x, i) { return x + i.rang; }, 0) / l.length;
+        return h("div", { class: "kl-kennzahl" }, [h("span", { class: "label", text: s }),
+          h("strong", { text: String(Math.round(schnitt * 10) / 10).replace(".", ",") }), h("span", { class: "leise", text: "Ø Rang bei " + l.length + (l.length === 1 ? " Urkunde" : " Urkunden") })]);
+      })));
+      var tbody = h("tbody");
+      zeilen.forEach(function (z) {
+        var i = z.i;
+        tbody.appendChild(h("tr", {}, [
+          h("th", { scope: "row", text: z.e.name }),
+          h("td", { text: D.stufen[i.stufe].name }),
+          h("td", { class: "zahl", text: i.rang ? i.rang + " · " + RAENGE[i.rang - 1] : "–" }),
+          h("td", { class: "zahl", text: String(i.geloest) }),
+          h("td", { class: "zahl", text: i.silber + " / " + i.gold }),
+          h("td", { class: "zahl", text: String(abzAnzahl(i.abz)) }),
+          h("td", { text: datumKurz(tagDatum(i.tag)) }),
+          h("td", { class: "nicht-drucken" }, [h("button", { class: "kl-weg", type: "button", "aria-label": z.e.name + " entfernen", title: "Eintrag entfernen", onclick: function () {
+            dialog("Eintrag entfernen?", "<strong>" + z.e.name.replace(/</g, "&lt;") + "</strong> (" + D.stufen[i.stufe].name + ") wird aus der Liste gelöscht.", [
+              { text: "Entfernen", art: "warn", aktion: function () { aktiv.eintraege.splice(aktiv.eintraege.indexOf(z.e), 1); klSpeichern(d); zeige("lkKlassen", { klasse: aktiv.id }); } },
+              { text: "Abbrechen", art: "zweit" },
+            ]);
+          } }, ["✕"])]),
+        ]));
+      });
+      tab.appendChild(h("div", { class: "kl-tabelle-rahmen" }, [h("table", { class: "kl-tabelle" }, [
+        h("thead", {}, [h("tr", {}, ["Name", "Stufe", "Rang", "Gelöst", "Silber / Gold", "Abzeichen", "Urkunde vom", ""].map(function (t) { return h("th", { scope: "col", text: t }); }))]),
+        tbody,
+      ])]));
+    }
+    // Werkzeuge
+    var datei = h("input", { type: "file", accept: ".json,application/json", hidden: true, "aria-hidden": "true" });
+    datei.addEventListener("change", function () {
+      var f = datei.files && datei.files[0]; datei.value = "";
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () {
+        var neu = 0, fehl = 0;
+        try {
+          var inhalt = JSON.parse(r.result);
+          if (!inhalt || inhalt.art !== "denkwerk-klassen" || !Array.isArray(inhalt.klassen)) throw new Error("falsch");
+          inhalt.klassen.forEach(function (kk) {
+            var ziel = d.klassen.filter(function (x) { return x.name.toLowerCase() === String(kk.name).toLowerCase(); })[0];
+            if (!ziel) { ziel = { id: klNeueId(), name: String(kk.name).slice(0, 30), eintraege: [] }; d.klassen.push(ziel); }
+            (kk.eintraege || []).forEach(function (e) {
+              var vorher = ziel.eintraege.some(function (x) { return x.code === e.code && nameNorm(x.name) === nameNorm(e.name); });
+              if (vorher) return;
+              var res = klEintragen(d, ziel.id, e.name, e.code);
+              if (res.ok) neu++; else fehl++;
+            });
+          });
+        } catch (err) { toast("Diese Datei ist keine Klassenliste von Denkwerk"); return; }
+        klSpeichern(d);
+        toast(neu + " Einträge übernommen" + (fehl ? ", " + fehl + " übersprungen" : ""));
+        zeige("lkKlassen", { klasse: aktiv.id });
+      };
+      r.readAsText(f);
+    });
+    seite.appendChild(h("section", { class: "blatt stapel nicht-drucken" }, [
+      h("h2", { text: "Liste sichern und weitergeben" }),
+      h("p", { class: "leise", text: "Die Klassenliste liegt nur in diesem Browser. Speichere ab und zu eine Sicherung. Die Tabelle für Excel oder Numbers enthält Namen – gib sie nur auf sicherem Weg weiter." }),
+      h("div", { class: "knopfreihe" }, [
+        h("button", { class: "knopf leicht", type: "button", onclick: function () {
+          dateiAnbieten(new Blob([klCsv(aktiv)], { type: "text/csv;charset=utf-8" }), "Denkwerk-" + aktiv.name.replace(/[^\w\-]+/g, "_") + "-" + isoTag(new Date()) + ".csv", "Denkwerk " + aktiv.name);
+        } }, ["Tabelle (CSV) für Excel"]),
+        h("button", { class: "knopf leicht", type: "button", onclick: function () { window.print(); } }, ["Drucken"]),
+        h("button", { class: "knopf zweit", type: "button", onclick: function () {
+          var inhalt = { art: "denkwerk-klassen", version: 1, erstellt: new Date().toISOString(), klassen: d.klassen };
+          dateiAnbieten(new Blob([JSON.stringify(inhalt, null, 1)], { type: "application/json" }), "Denkwerk-Klassen-" + isoTag(new Date()) + ".json", "Denkwerk Klassen");
+        } }, ["Alle Klassen sichern"]),
+        h("button", { class: "knopf zweit", type: "button", onclick: function () { datei.click(); } }, ["Sicherung laden"]),
+      ]),
+      datei,
+      h("div", { class: "knopfreihe abstand" }, [
+        h("button", { class: "knopf zweit warn-text", type: "button", onclick: function () {
+          dialog("Klasse " + aktiv.name.replace(/</g, "&lt;") + " löschen?", "Die Klasse und alle " + aktiv.eintraege.length + " Einträge werden von diesem Gerät gelöscht.", [
+            { text: "Löschen", art: "warn", aktion: function () { d.klassen.splice(d.klassen.indexOf(aktiv), 1); klSpeichern(d); zeige("lkKlassen"); } },
+            { text: "Abbrechen", art: "zweit" },
+          ]);
+        } }, ["Klasse löschen"]),
+      ]),
+    ]));
   };
 
   // Links mit #auftrag=… oder #pruefen=… auswerten
@@ -2168,7 +2568,7 @@
   laden();
   abzeichenAktualisieren(false);
   window.__denkwerkZeige = zeige;   // für automatische Tests
-  window.__denkwerkIntern = { zustand: function () { return zustand; }, codeLesen: codeLesen, auftragLesen: auftragLesen, auftragCode: auftragCode,
+  window.__denkwerkIntern = { zustand: function () { return zustand; }, codeLesen: codeLesen, codeBauen: codeBauen, nameHash: nameHash, auftragLesen: auftragLesen, auftragCode: auftragCode,
     urkundeDaten: urkundeDaten, urkundePdf: urkundePdf, sicherungInhalt: sicherungInhalt, siegel: siegel, statistik: statistik, laden: laden };
   var startZiel = hashAuswerten();
   if (startZiel && startZiel.pruefen) zeige("pruefen", startZiel.pruefen);

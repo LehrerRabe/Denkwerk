@@ -1,3 +1,12 @@
+/* Schriften lokal (SIL Open Font License, siehe fonts/LICENSE-*) – keine Verbindung zu Google */
+@font-face { font-family: "Atkinson Hyperlegible"; src: url("fonts/atkinson-hyperlegible-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Atkinson Hyperlegible"; src: url("fonts/atkinson-hyperlegible-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Atkinson Hyperlegible"; src: url("fonts/atkinson-hyperlegible-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Bricolage Grotesque"; src: url("fonts/bricolage-grotesque-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Bricolage Grotesque"; src: url("fonts/bricolage-grotesque-latin-800-normal.woff2") format("woff2"); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("fonts/jetbrains-mono-latin-800-normal.woff2") format("woff2"); font-weight: 800; font-style: normal; font-display: swap; }
+
 /* Layout: Heftseite auf Karopapier – eine schmale Lesespalte (max. 860px) mit rotem Heftrand links,
    Menüs als große Tipp-Flächen, Aufgaben als Arbeitsblatt. */
 :root {
@@ -228,6 +237,33 @@ textarea.feld { min-height: 140px; resize: vertical; max-width: 100%; }
 .option.nein { border-color: var(--falsch); background: var(--falsch-flaeche); }
 
 .werkzeug { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; border-top: 1.5px dashed var(--linie); }
+
+/* Schmierzettel */
+.schmier { display: flex; flex-direction: column; gap: 10px; }
+.schmier-auf { align-self: flex-start; }
+.schmier-inhalt { display: flex; flex-direction: column; gap: 8px; }
+.schmier-inhalt[hidden] { display: none; }
+.schmier-leiste { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.schmier-knopf {
+  min-width: 44px; height: 44px; padding: 0 10px; border-radius: 8px; border: 1.5px solid var(--linie);
+  background: var(--flaeche); color: var(--text); font: 700 1.15rem/1 var(--f-text); cursor: pointer;
+}
+.schmier-knopf.blau { color: var(--tinte); }
+.schmier-knopf.rot { color: var(--falsch); }
+.schmier-knopf[aria-pressed="true"] { border-color: var(--tinte); background: var(--tinte-hell); box-shadow: inset 0 0 0 1px var(--tinte); }
+.schmier-knopf:focus-visible { outline: 3px solid var(--marker); outline-offset: 2px; }
+.schmier-trenner { width: 1px; height: 28px; background: var(--linie); margin: 0 4px; }
+.schmier-rahmen { border: 1.5px solid var(--linie); border-radius: 8px; overflow: hidden; background: var(--papier); }
+.schmier-blatt {
+  display: block; width: 100%; touch-action: none; cursor: crosshair;
+  background-color: var(--papier);
+  background-image: linear-gradient(var(--karo) 1px, transparent 1px), linear-gradient(90deg, var(--karo) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.schmier-blatt.ohne-raster { background-image: none; }
+.schmier-blatt.radiert { cursor: cell; }
+.schmier-hinweis { font-size: .8rem; margin: 0; }
+@media print { .schmier { display: none; } }
 .hilfe-box { padding: 12px 14px; border-radius: 8px; background: var(--tinte-hell); display: flex; flex-direction: column; gap: 6px; }
 .hilfe-box.loesung { background: var(--marker-flaeche); border: 1.5px solid var(--marker); }
 .hilfe-box .label { color: var(--tinte); }
@@ -523,3 +559,25 @@ select.feld { appearance: auto; }
   .gitter-huelle, .abb { overflow: visible; }
 }
 .abstand { margin-top: 22px; }
+@media (max-width: 480px) { .schmier-knopf { min-width: 40px; height: 40px; padding: 0 8px; } .schmier-leiste { gap: 5px; } .schmier-trenner { display: none; } }
+
+/* Klassenübersicht */
+.kl-reiter { display: flex; flex-wrap: wrap; gap: 8px; }
+.kl-chip { cursor: pointer; border: 1.5px solid var(--linie); background: var(--flaeche); color: var(--text); font: inherit; font-weight: 700; padding: 8px 14px; min-height: 44px; }
+.kl-chip.aktiv { border-color: var(--tinte); background: var(--tinte-hell); color: var(--tinte); }
+.kl-neu { align-items: stretch; }
+.kl-neu .feld { flex: 1 1 160px; max-width: 260px; }
+.kl-kennzahlen { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.kl-kennzahl { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 8px; background: var(--tinte-hell); }
+.kl-kennzahl strong { font: 800 1.6rem/1.1 var(--f-zahl); color: var(--tinte); }
+.kl-kennzahl .leise { font-size: .82rem; }
+.kl-tabelle-rahmen { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.kl-tabelle { border-collapse: collapse; width: 100%; min-width: 620px; font-size: .95rem; }
+.kl-tabelle th, .kl-tabelle td { text-align: left; padding: 8px; border-bottom: 1px solid var(--linie); white-space: nowrap; }
+.kl-tabelle thead th { color: var(--text-leise); font-size: .82rem; font-weight: 700; }
+.kl-tabelle tbody th { font-weight: 700; }
+.kl-tabelle td.zahl { font-family: var(--f-zahl); font-variant-numeric: tabular-nums; }
+.kl-weg { border: 0; background: none; color: var(--falsch); font-size: 1rem; cursor: pointer; min-width: 36px; min-height: 36px; border-radius: 6px; }
+.kl-weg:hover { background: var(--falsch-flaeche); }
+.knopf.warn-text { color: var(--falsch); border-color: var(--falsch); }
+@media print { .kl-tabelle { min-width: 0; } .kl-uebernehmen { display: none; } }

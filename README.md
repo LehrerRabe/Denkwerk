@@ -1,6 +1,6 @@
 # Denkwerk
 
-Zusatzaufgaben für Schülerinnen und Schüler, die im Matheunterricht schnell fertig sind. Klasse 5 bis Q2, 23 Kategorien, 1740 Aufgaben (10 je Kategorie und Jahrgangsstufe) mit gestaffelter Hilfe und Lösungskontrolle.
+Zusatzaufgaben für Schülerinnen und Schüler, die im Matheunterricht schnell fertig sind. Klasse 5 bis Q2, 23 Kategorien, 1768 Aufgaben (meist 10 je Kategorie und Jahrgangsstufe, einige Themen ergänzt) mit gestaffelter Hilfe und Lösungskontrolle.
 
 ## Auf GitHub Pages veröffentlichen
 
@@ -17,6 +17,8 @@ Zusatzaufgaben für Schülerinnen und Schüler, die im Matheunterricht schnell f
 - **Zum Home-Bildschirm hinzufügen.** Safari löscht gespeicherte Daten von Webseiten, die 7 Tage nicht besucht wurden. Über *Teilen → Zum Home-Bildschirm* öffnet sich Denkwerk wie eine App, dann bleibt der Fortschritt erhalten.
 - **Sicherung.** Schülerinnen und Schüler können ihren Fortschritt als Datei sichern und wieder laden. Veränderte Dateien werden abgelehnt.
 - **Prüfcode auf Urkunden.** Er erschwert gefälschte oder nachträglich veränderte Urkunden. Weil alles ohne Server im Browser läuft, ist das kein echter Fälschungsschutz gegen jemanden, der den Code der Seite untersucht.
+- **Schmierzettel.** Unter jeder Aufgabe lässt sich ein Zeichenblatt für Nebenrechnungen öffnen (Finger, Stift oder Maus). Es bleibt nur auf dem Gerät und wird nicht in die Sicherung übernommen.
+- **Klassenübersicht.** Im Lehrkraft-Bereich trägt die Lehrkraft die Prüfcodes der Urkunden pro Klasse ein. Die Liste liegt nur im Browser der Lehrkraft; sie lässt sich als CSV (Excel) und als Sicherungsdatei speichern.
 - Die Suchmaschinen-Sperre (`robots.txt`, `noindex`) sorgt dafür, dass die Seite nicht bei Google auftaucht.
 
 ## Dateien
@@ -28,5 +30,6 @@ Zusatzaufgaben für Schülerinnen und Schüler, die im Matheunterricht schnell f
 | `app.css` | Gestaltung |
 | `aufgaben.js` | Alle Aufgaben, Hilfen und Lösungen |
 | `themen.js` | Zuordnung der Aufgaben zu Unterrichtsthemen (schulinternes Curriculum Kl. 5–10, KLP GOSt für EF–Q2) |
+| `fonts/` | Schriften Atkinson Hyperlegible, Bricolage Grotesque, JetBrains Mono (SIL Open Font License, Lizenztexte im Ordner) – lokal eingebunden, es werden keine Google-Server angefragt |
 | `vendor/jspdf.umd.min.js`, `vendor/qrcode.js` | Fremdbibliotheken (MIT-Lizenz) für die Urkunde als PDF und QR-Codes |
 | `manifest.webmanifest`, `icon-*.png` | App-Symbol für den Home-Bildschirm |
