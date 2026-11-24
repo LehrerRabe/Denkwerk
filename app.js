@@ -156,6 +156,227 @@
     return D.kategorien.filter(function (k) { return aufgabenVon(stufe, k.id).length > 0; });
   }
 
+  // ------------------------------------------------------------ Suche
+  // Gleiche Regeln wie in „Aufgaben be-greifen“ (suche.js):
+  // - Groß-/Kleinschreibung und Umlaute sind egal („brueche“ = „Brüche“), doppelte Buchstaben zählen einfach.
+  // - Tippfehler: ab 4 Buchstaben einer, ab 8 Buchstaben zwei (Damerau-Levenshtein). Wortanfänge zählen.
+  // - Mehrere Wörter grenzen ein (alle müssen passen, Reihenfolge egal). Treffer im Titel zählen mehr.
+  // - Ein paar Alltagswörter werden mitgedacht („plus“ → addieren …).
+  // - Der Filter nach Jahrgangsstufe schränkt zusätzlich ein, auch ganz ohne Suchwort.
+  // Durchsucht werden Titel, Aufgabentext, Kategorie, Unterrichtsthema, Kompetenz und Schwierigkeit.
+  function faltung(x) {
+    return String(x == null ? "" : x).toLowerCase()
+      .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/([a-z])\1+/g, "$1")
+      .trim();
+  }
+  var SYNONYME = [
+    ["plus", "addieren", "addition", "summe"],
+    ["minus", "subtrahieren", "subtraktion", "differenz", "abziehen"],
+    ["mal", "multiplizieren", "multiplikation", "produkt"],
+    ["geteilt", "dividieren", "division", "teilen", "quotient"],
+    ["prozent", "prozente", "prozentrechnung"],
+    ["komma", "kommazahl", "kommazahlen", "dezimalzahl", "dezimalzahlen"],
+    ["bruch", "brueche", "bruchrechnung", "bruchrechnen"],
+    ["flaeche", "flaechen", "flaecheninhalt"],
+    ["volumen", "rauminhalt", "koerper"],
+    ["negativ", "negative", "vorzeichen", "rational", "rationale"],
+    ["wahrscheinlichkeit", "zufall"],
+    ["primzahl", "primzahlen", "teiler"],
+    ["schaetzen", "schaetzaufgabe", "fermi"],
+    ["geheimschrift", "verschluesselung", "code", "codes"],
+    ["gleichung", "gleichungen", "waage"],
+    ["kombinatorik", "moeglichkeiten", "anzahl"],
+  ].map(function (g) { return g.map(faltung); });
+  function varianten(w) {
+    var g = SYNONYME.filter(function (gr) { return gr.indexOf(w) >= 0; })[0];
+    if (!g) return [w];
+    var v = [w]; g.forEach(function (x) { if (v.indexOf(x) < 0) v.push(x); });
+    return v;
+  }
+  // Damerau-Levenshtein (eingeschränkt), bricht ab, sobald die Grenze überschritten ist
+  function abstand(a, b, grenze) {
+    if (Math.abs(a.length - b.length) > grenze) return grenze + 1;
+    var d = [], i, j;
+    for (i = 0; i <= a.length; i++) { d.push([i]); for (j = 1; j <= b.length; j++) d[i].push(i ? 0 : j); }
+    for (i = 1; i <= a.length; i++) {
+      var zeilenMin = Infinity;
+      for (j = 1; j <= b.length; j++) {
+        var k = a[i - 1] === b[j - 1] ? 0 : 1;
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + k);
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+        if (d[i][j] < zeilenMin) zeilenMin = d[i][j];
+      }
+      if (zeilenMin > grenze) return grenze + 1;
+    }
+    return d[a.length][b.length];
+  }
+  function toleranz(w) { return w.length >= 8 ? 2 : (w.length >= 4 ? 1 : 0); }
+  // Wie gut passt ein Suchwort zu einem Wort aus dem Index? 0 = gar nicht.
+  function passt(w, t) {
+    if (t === w) return 5;
+    if (t.indexOf(w) === 0) return 4;
+    if (w.length >= 3 && t.indexOf(w) >= 0) return 3;
+    var tol = toleranz(w);
+    if (!tol) return 0;
+    if (abstand(w, t, tol) <= tol) return 2;
+    if (w.length < 5) return 0;   // Tippfehler am Wortanfang erst ab 5 Buchstaben
+    for (var l = w.length - 1; l <= w.length + 1; l++) {
+      if (l < 3 || l >= t.length) continue;
+      if (abstand(w, t.slice(0, l), tol) <= tol) return 1;
+    }
+    return 0;
+  }
+  // Index: Wortschatz → Aufgaben. So wird jedes Wort nur einmal verglichen, auch bei 1700 Aufgaben.
+  var SUCHINDEX = null;
+  function suchIndex() {
+    if (SUCHINDEX) return SUCHINDEX;
+    var woerter = {}, liste = [];   // woerter[wort] = { a: {nr: true}, t: {nr: true} }
+    function rein(text, nr, titel) {
+      faltung(text).split(" ").forEach(function (w) {
+        if (!w) return;
+        var e = woerter[w] || (woerter[w] = { a: {}, t: {} });
+        e.a[nr] = true; if (titel) e.t[nr] = true;
+      });
+    }
+    var tmp = document.createElement("div");
+    D.aufgaben.forEach(function (a, nr) {
+      tmp.innerHTML = String(a.text || "").replace(/<svg[\s\S]*?<\/svg>/g, " ").replace(/<(?:br|p|li|div|td|th)\b/gi, " $&");
+      var k = katNachId[a.kat], s = stufeNachId[a.stufe];
+      rein(a.titel, nr, true);
+      rein([tmp.textContent, k.name, k.kurz, s.name, s.kurz, themenDerAufgabe(a).join(" "), a.kompetenz, ["", "leicht", "mittel", "knifflig"][a.sterne]].join(" "), nr, false);
+      liste.push(a);
+    });
+    SUCHINDEX = { woerter: woerter, liste: liste, schluessel: Object.keys(woerter), cache: {} };
+    return SUCHINDEX;
+  }
+  // Liefert passende Aufgaben (beste zuerst; ohne Suchwort in der Reihenfolge der App)
+  function suche(eingabe, jg) {
+    var ix = suchIndex();
+    var woerter = faltung(eingabe).split(" ").filter(Boolean);
+    var erlaubt = function (nr) { return !jg || ix.liste[nr].stufe === jg; };
+    if (!woerter.length) return jg ? ix.liste.filter(function (a, nr) { return erlaubt(nr); }) : [];
+    var summe = null;
+    for (var wi = 0; wi < woerter.length; wi++) {
+      var w = woerter[wi], best = {};
+      varianten(w).forEach(function (v) {
+        var abzug = v === w ? 0 : 2;   // verwandte Wörter zählen etwas weniger als das eingetippte
+        var b = {}, imTitel = {};
+        var paare = ix.cache[v];   // welche Index-Wörter passen zu v? (wird gemerkt, Suchen beim Tippen bleibt schnell)
+        if (!paare) {
+          paare = [];
+          ix.schluessel.forEach(function (t) { var s = passt(v, t); if (s) paare.push([t, s]); });
+          ix.cache[v] = paare;
+        }
+        paare.forEach(function (paar) {
+          var t = paar[0], s = paar[1];
+          var e = ix.woerter[t];
+          for (var nr in e.a) {
+            if (!erlaubt(nr) || (summe && !(nr in summe))) continue;
+            if (!b[nr] || s > b[nr]) b[nr] = s;
+            if (s >= 2 && e.t[nr]) imTitel[nr] = true;
+          }
+        });
+        for (var nr in b) {
+          var wert = Math.max(1, b[nr] + (imTitel[nr] ? 3 : 0) - abzug);
+          if (!best[nr] || wert > best[nr]) best[nr] = wert;
+        }
+      });
+      var neu = {};
+      for (var nr2 in best) neu[nr2] = (summe ? summe[nr2] : 0) + best[nr2];
+      summe = neu;
+      if (!Object.keys(summe).length) return [];
+    }
+    return Object.keys(summe).map(Number)
+      .sort(function (x, y) { return summe[y] - summe[x] || x - y; })
+      .map(function (nr) { return ix.liste[nr]; });
+  }
+
+  // Zustand der Suche: bleibt erhalten, wenn man aus einem Treffer zurückkommt
+  var SUCHE = { q: "", jg: null, behalten: false, rueck: null, zeigen: 40 };
+  function suchAdresse() {
+    if (!history.replaceState) return;
+    var aktiv = SUCHE.q.trim() || SUCHE.jg;
+    var p = [];
+    if (SUCHE.q.trim()) p.push("q=" + encodeURIComponent(SUCHE.q.trim()));
+    if (SUCHE.jg) p.push("j=" + encodeURIComponent(SUCHE.jg));
+    history.replaceState(null, "", location.pathname + location.search + (aktiv ? "#suche?" + p.join("&") : ""));
+  }
+  // Suchleiste für Hauptmenü und Stufenseite. Alles, was danach auf der Seite steht, wird bei einer Suche ausgeblendet.
+  function sucheLeiste(ansicht, arg, startJg) {
+    if (!SUCHE.behalten) { SUCHE.q = ""; SUCHE.jg = startJg || null; }
+    SUCHE.behalten = false; SUCHE.zeigen = 40;
+    var eingabe = h("input", { type: "search", id: "suche-eingabe", value: SUCHE.q, placeholder: "Suchen – z. B. Brüche, Würfel, Uhr …",
+      autocomplete: "off", autocapitalize: "off", spellcheck: "false", enterkeyhint: "search", "aria-label": "Aufgaben suchen" });
+    var jgReihe = h("div", { class: "filter jg-filter", role: "group", "aria-label": "Jahrgangsstufe" }, [h("span", { class: "jg-titel", text: "Stufe:" })]);
+    [{ id: null, kurz: "alle" }].concat(D.stufen).forEach(function (s) {
+      jgReihe.appendChild(h("button", { type: "button", "data-jg": s.id || "", "aria-pressed": String(SUCHE.jg === s.id),
+        onclick: function () { SUCHE.jg = s.id; aendern(); } }, [s.kurz]));
+    });
+    var treffer = h("div", { id: "suche-treffer", class: "suche-treffer", hidden: true });
+    var leiste = h("div", { class: "suche-leiste", role: "search" }, [
+      h("label", { class: "suche-feld" }, [h("span", { class: "suche-lupe", "aria-hidden": "true", html: "&#9906;" }), eingabe]),
+      jgReihe,
+    ]);
+    var box = h("div", { class: "suche-box" }, [leiste, treffer]);
+    var uhr = null, menueAus = false;
+    function menue(aus) {
+      // Inhalt der Seite unter der Suchleiste aus- oder einblenden
+      var n = box.nextSibling;
+      while (n) { if (n.nodeType === 1 && !n.classList.contains("auftrag-banner")) n.classList.toggle("such-versteckt", aus); n = n.nextSibling; }
+      var gruss = box.previousSibling;
+      if (gruss && gruss.classList && gruss.classList.contains("begruessung")) gruss.classList.toggle("such-versteckt", aus);
+      menueAus = aus;
+    }
+    function aendern() {
+      var aktiv = Boolean(SUCHE.q.trim() || SUCHE.jg);
+      jgReihe.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", String((b.getAttribute("data-jg") || null) === SUCHE.jg)); });
+      // Auf der Stufenseite ist die eigene Stufe der Normalfall – erst ein Suchwort oder eine andere Stufe blendet das Menü aus
+      var ersetzt = Boolean(SUCHE.q.trim() || (SUCHE.jg && SUCHE.jg !== startJg));
+      if (ansicht === "stufe" && !SUCHE.q.trim() && SUCHE.jg === startJg) aktiv = false;
+      if (ansicht === "start") ersetzt = aktiv;
+      menue(ersetzt);
+      treffer.hidden = !ersetzt;
+      SUCHE.zeigen = 40;
+      if (ersetzt) zeichnen(); else treffer.innerHTML = "";
+      suchAdresse();
+    }
+    function zeichnen() {
+      var liste = suche(SUCHE.q, SUCHE.jg);
+      var was = [SUCHE.q.trim() ? "„" + SUCHE.q.trim() + "“" : "", SUCHE.jg ? stufeNachId[SUCHE.jg].name : ""].filter(Boolean).join(" · ");
+      treffer.innerHTML = "";
+      if (!liste.length) {
+        treffer.appendChild(h("p", { class: "suche-info", "aria-live": "polite", text: "Nichts gefunden für " + was + ". Probiere ein anderes Wort" + (SUCHE.jg ? " oder „alle“ Stufen." : ".") }));
+        return;
+      }
+      treffer.appendChild(h("p", { class: "suche-info", "aria-live": "polite" }, [h("b", { text: String(liste.length) }), " " + (liste.length === 1 ? "Aufgabe" : "Aufgaben") + " für " + was]));
+      var l = h("div", { class: "liste" });
+      liste.slice(0, SUCHE.zeigen).forEach(function (a) {
+        var e = aufgabeEintrag(a, true);
+        e.onclick = function () { SUCHE.rueck = { ansicht: ansicht, arg: arg }; zeige("aufgabe", a.id); };
+        l.appendChild(e);
+      });
+      treffer.appendChild(l);
+      if (liste.length > SUCHE.zeigen) {
+        treffer.appendChild(h("div", { class: "knopfreihe abstand" }, [h("button", { class: "knopf zweit", type: "button", onclick: function () {
+          SUCHE.zeigen += 40; zeichnen();
+        } }, ["Weitere " + Math.min(40, liste.length - SUCHE.zeigen) + " anzeigen"])]));
+      }
+    }
+    eingabe.addEventListener("input", function () {
+      clearTimeout(uhr);
+      uhr = setTimeout(function () { SUCHE.q = eingabe.value; aendern(); }, 140);
+    });
+    eingabe.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); clearTimeout(uhr); SUCHE.q = eingabe.value; aendern(); eingabe.blur(); }
+      if (e.key === "Escape" && eingabe.value) { e.preventDefault(); eingabe.value = ""; SUCHE.q = ""; aendern(); }
+    });
+    box.starten = function () { if (SUCHE.q.trim() || SUCHE.jg !== (startJg || null)) aendern(); };
+    return box;
+  }
+
   // ------------------------------------------------------------ Rahmen
   var app = document.getElementById("app");
   var aktuelleAnsicht = null;
@@ -215,8 +436,12 @@
     app.innerHTML = "";
     var seite = h("main", { class: "seite" });
     app.appendChild(seite);
+    if (ansicht !== "aufgabe") SUCHE.rueck = null;
+    if (location.hash.indexOf("#suche") === 0 && history.replaceState) history.replaceState(null, "", location.pathname + location.search);
     ANSICHTEN[ansicht](seite, arg);
     if (["start", "stufe", "kategorie", "rad", "letzte", "erfolge"].indexOf(ansicht) >= 0) auftragBanner(seite);
+    var sb = seite.querySelector(".suche-box");
+    if (sb && sb.starten) sb.starten();
     window.scrollTo(0, 0);
   }
 
@@ -320,6 +545,7 @@
       h("h1", { text: "Welche Stufe bist du?" }),
       h("p", { text: "Wähle deine Jahrgangsstufe. Dort findest du Knobelaufgaben, die zu dem passen, was du schon kannst. Du darfst auch eine Stufe höher probieren." }),
     ]));
+    seite.appendChild(sucheLeiste("start", undefined, null));
     var raster = h("div", { class: "stufen" });
     D.stufen.forEach(function (s, i) {
       var r = rangInfo(s.id);
@@ -394,6 +620,7 @@
       h("h1", { text: "Such dir eine Kategorie aus" }),
       h("p", { text: r.geloest + " von " + r.alle + " Aufgaben richtig gelöst (" + f.fertig + " bearbeitet). Die Zahlen rechts zeigen, wie viele Aufgaben einer Kategorie du richtig gelöst hast. Oder lass das Glücksrad entscheiden." }),
     ]));
+    seite.appendChild(sucheLeiste("stufe", stufe, stufe));
     seite.appendChild(h("div", { class: "rangkarte sf" + D.stufen.indexOf(s) }, [
       h("span", { class: "rang-nr gross-nr", "aria-hidden": "true", text: r.nr ? String(r.nr) : "–" }),
       h("div", { class: "stapel-eng" }, [
@@ -808,7 +1035,10 @@
     }
 
     var k1 = kopf({ text: "Hauptmenü", aktion: function () { verlassen(function () { zeige("start"); }); } }, a.stufe, true);
-    k1.gruppe.insertBefore(h("button", { class: "zurueck", type: "button", onclick: function () {
+    var rueck = SUCHE.rueck;
+    k1.gruppe.insertBefore(rueck ? h("button", { class: "zurueck", type: "button", onclick: function () {
+      verlassen(function () { SUCHE.behalten = true; zeige(rueck.ansicht, rueck.arg); });
+    } }, ["← Suche"]) : h("button", { class: "zurueck", type: "button", onclick: function () {
       verlassen(function () { zeige("kategorie", { stufe: a.stufe, kat: a.kat }); });
     } }, ["← " + k.name]), k1.gruppe.firstChild);
     seite.appendChild(k1);
@@ -2559,6 +2789,15 @@
       ziel = { pruefen: m[1] };
     } else if (hs === "#lehrkraft") {
       ziel = { lehrkraft: true };
+    } else if ((m = hs.match(/^#suche\?(.*)$/))) {
+      var q = "", j = null;
+      m[1].split("&").forEach(function (t) {
+        var kv = t.split("="), v = "";
+        try { v = decodeURIComponent((kv[1] || "").replace(/\+/g, " ")); } catch (e) { v = ""; }
+        if (kv[0] === "q") q = v.slice(0, 80);
+        if (kv[0] === "j" && stufeNachId[v]) j = v;
+      });
+      ziel = { suche: { q: q, jg: j } };
     }
     if (hs && history.replaceState) history.replaceState(null, "", location.pathname + location.search);
     return ziel;
@@ -2568,11 +2807,12 @@
   laden();
   abzeichenAktualisieren(false);
   window.__denkwerkZeige = zeige;   // für automatische Tests
-  window.__denkwerkIntern = { zustand: function () { return zustand; }, codeLesen: codeLesen, codeBauen: codeBauen, nameHash: nameHash, auftragLesen: auftragLesen, auftragCode: auftragCode,
+  window.__denkwerkIntern = { suche: suche, faltung: faltung, zustand: function () { return zustand; }, codeLesen: codeLesen, codeBauen: codeBauen, nameHash: nameHash, auftragLesen: auftragLesen, auftragCode: auftragCode,
     urkundeDaten: urkundeDaten, urkundePdf: urkundePdf, sicherungInhalt: sicherungInhalt, siegel: siegel, statistik: statistik, laden: laden };
   var startZiel = hashAuswerten();
   if (startZiel && startZiel.pruefen) zeige("pruefen", startZiel.pruefen);
   else if (startZiel && startZiel.lehrkraft) zeige("lehrkraft");
+  else if (zustand.auth && startZiel && startZiel.suche) { SUCHE.q = startZiel.suche.q; SUCHE.jg = startZiel.suche.jg; SUCHE.behalten = true; zeige("start"); }
   else if (zustand.auth) { zeige("start"); if (startZiel && startZiel.auftrag) toast("Neuer Auftrag von deiner Lehrkraft"); }
   else zeige("anmeldung");
   // Link wird geöffnet, während Denkwerk schon offen ist (nur der Teil nach # ändert sich)
@@ -2581,6 +2821,7 @@
     if (!z) return;
     if (z.pruefen) zeige("pruefen", z.pruefen);
     else if (z.lehrkraft) zeige("lehrkraft");
+    else if (z.suche) { if (zustand.auth) { SUCHE.q = z.suche.q; SUCHE.jg = z.suche.jg; SUCHE.behalten = true; zeige("start"); } else zeige("anmeldung"); }
     else if (z.auftrag) { if (zustand.auth) { zeige("start"); toast("Neuer Auftrag von deiner Lehrkraft"); } else zeige("anmeldung"); }
   });
 })();

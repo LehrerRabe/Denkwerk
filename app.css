@@ -581,3 +581,19 @@ select.feld { appearance: auto; }
 .kl-weg:hover { background: var(--falsch-flaeche); }
 .knopf.warn-text { color: var(--falsch); border-color: var(--falsch); }
 @media print { .kl-tabelle { min-width: 0; } .kl-uebernehmen { display: none; } }
+
+/* Suche (Regeln wie in „Aufgaben be-greifen“) */
+.suche-box { display: flex; flex-direction: column; gap: 14px; margin: 4px 0 18px; }
+.suche-leiste { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.suche-feld { flex: 1 1 18rem; display: flex; align-items: center; gap: 8px; background: var(--flaeche); border: 2px solid var(--linie); border-radius: 999px; padding: 2px 16px; }
+.suche-feld:focus-within { border-color: var(--tinte); box-shadow: 0 0 0 3px var(--tinte-hell); }
+.suche-feld input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text); font: 600 1.08rem var(--f-text); padding: 11px 0; }
+.suche-feld input::-webkit-search-cancel-button { cursor: pointer; }
+.suche-lupe { font-size: 1.3rem; color: var(--text-leise); transform: rotate(-45deg); line-height: 1; }
+.jg-filter { align-items: center; }
+.jg-filter .jg-titel { font-weight: 700; color: var(--text-leise); margin-right: 2px; }
+.jg-filter button { min-width: 44px; min-height: 40px; }
+.suche-info { margin: 0; color: var(--text-leise); font-weight: 600; }
+.suche-treffer { display: flex; flex-direction: column; gap: 12px; }
+.suche-treffer[hidden] { display: none; }
+.such-versteckt { display: none !important; }

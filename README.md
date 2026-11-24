@@ -17,6 +17,7 @@ Zusatzaufgaben für Schülerinnen und Schüler, die im Matheunterricht schnell f
 - **Zum Home-Bildschirm hinzufügen.** Safari löscht gespeicherte Daten von Webseiten, die 7 Tage nicht besucht wurden. Über *Teilen → Zum Home-Bildschirm* öffnet sich Denkwerk wie eine App, dann bleibt der Fortschritt erhalten.
 - **Sicherung.** Schülerinnen und Schüler können ihren Fortschritt als Datei sichern und wieder laden. Veränderte Dateien werden abgelehnt.
 - **Prüfcode auf Urkunden.** Er erschwert gefälschte oder nachträglich veränderte Urkunden. Weil alles ohne Server im Browser läuft, ist das kein echter Fälschungsschutz gegen jemanden, der den Code der Seite untersucht.
+- **Suche.** Im Hauptmenü und auf jeder Stufenseite lassen sich alle Aufgaben durchsuchen (Titel, Text, Kategorie, Thema). Groß-/Kleinschreibung, Umlaute und kleine Tippfehler sind egal, mehrere Wörter grenzen ein, und ein Stufen-Filter schränkt zusätzlich ein – wie in „Aufgaben be-greifen“. Ein Link wie `…/Denkwerk/#suche?q=pizza&j=7` öffnet direkt eine Suche.
 - **Schmierzettel.** Unter jeder Aufgabe lässt sich ein Zeichenblatt für Nebenrechnungen öffnen (Finger, Stift oder Maus). Es bleibt nur auf dem Gerät und wird nicht in die Sicherung übernommen.
 - **Klassenübersicht.** Im Lehrkraft-Bereich trägt die Lehrkraft die Prüfcodes der Urkunden pro Klasse ein. Die Liste liegt nur im Browser der Lehrkraft; sie lässt sich als CSV (Excel) und als Sicherungsdatei speichern.
 - Die Suchmaschinen-Sperre (`robots.txt`, `noindex`) sorgt dafür, dass die Seite nicht bei Google auftaucht.
